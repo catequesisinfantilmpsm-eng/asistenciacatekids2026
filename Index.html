@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#1259a7">
+  <style>
+    :root{--blue:#1259a7;--light:#eaf5ff;--gold:#f4b942;--green:#16865a;--red:#c23b44;--ink:#17324d}
+    *{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:linear-gradient(160deg,#dff2ff,#fff8e6);color:var(--ink);min-height:100vh}
+    main{max-width:540px;margin:auto;padding:22px 16px 50px}.brand{text-align:center;margin:8px 0 22px}.cross{font-size:34px}.brand h1{margin:5px 0;color:var(--blue);font-size:28px}.brand p{margin:0;color:#60758a}
+    .card{background:#fff;border-radius:22px;padding:18px;box-shadow:0 12px 30px #1a4d7520;margin:14px 0}.scan{width:100%;padding:15px;border:0;border-radius:14px;background:var(--blue);color:#fff;font-weight:700;font-size:17px}.manual{display:flex;gap:8px;margin-top:12px}.manual input{min-width:0;flex:1;padding:12px;border:1px solid #cbd9e5;border-radius:12px}.manual button{border:0;border-radius:12px;background:var(--gold);padding:0 16px;font-weight:700}
+    video{width:100%;border-radius:16px;background:#102235;margin-top:14px;display:none}.hint,.updated{text-align:center;color:#6d7e8e;font-size:13px}.hidden{display:none}.student h2{margin:0 0 6px;color:var(--blue)}.pill{display:inline-block;background:var(--light);padding:6px 10px;border-radius:999px;margin:3px;font-size:13px}
+    .score{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}.score div{background:var(--light);border-radius:15px;padding:12px 5px}.score b{display:block;font-size:23px;color:var(--blue)}
+    .bar{height:13px;background:#e6edf3;border-radius:999px;overflow:hidden;margin:13px 0}.bar span{display:block;height:100%;background:linear-gradient(90deg,var(--green),#53c48b)}
+    .cat{display:flex;justify-content:space-between;border-bottom:1px solid #edf1f4;padding:12px 0}.cat:last-child{border:0}.ok{color:var(--green);font-weight:bold}.miss{color:var(--red);font-weight:bold}.history{list-style:none;padding:0;margin:0}.history li{display:grid;grid-template-columns:30px 1fr auto;gap:8px;padding:11px 0;border-bottom:1px solid #edf1f4}.error{color:var(--red);text-align:center;font-weight:700}.loader{text-align:center;padding:20px}
+  </style>
+</head>
+<body><main>
+  <section class="brand"><div class="cross">✝️</div><h1>CATEKIDS</h1><p>Consulta de asistencias</p></section>
+  <section class="card" id="scannerCard">
+    <button class="scan" id="scanBtn">📷 Escanear mi tarjeta QR</button>
+    <video id="video" playsinline></video>
+    <div class="manual"><input id="code" placeholder="O pega aquí el código del QR"><button id="searchBtn">Consultar</button></div>
+    <p class="hint">La consulta no modifica tus asistencias.</p><p class="error" id="error"></p>
+  </section>
+  <div id="loading" class="card loader hidden">Consultando asistencias…</div>
+  <section id="result" class="hidden">
+    <div class="card student"><h2 id="name"></h2><div id="meta"></div><p id="saint"></p></div>
+    <div class="card"><div class="score"><div><b id="attended"></b>Asistencias</div><div><b id="missed"></b>Faltas</div><div><b id="percent"></b>Cumplimiento</div></div><div class="bar"><span id="bar"></span></div></div>
+    <div class="card"><h3>Resumen</h3><div id="categories"></div></div>
+    <div class="card"><h3>Historial</h3><ul class="history" id="history"></ul><p class="updated" id="updated"></p></div>
+  </section>
+</main><script>
+  const $=id=>document.getElementById(id), video=$('video'); let stream=null, timer=null;
+  $('searchBtn').onclick=()=>lookup($('code').value); $('code').onkeydown=e=>{if(e.key==='Enter')lookup(e.target.value)};
+  $('scanBtn').onclick=async()=>{
+    $('error').textContent='';
+    if(!('BarcodeDetector' in window)){ $('error').textContent='Este navegador no permite escaneo directo. Usa Chrome o pega el código manualmente.'; return; }
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); video.srcObject=stream; video.style.display='block'; await video.play();
+      const detector=new BarcodeDetector({formats:['qr_code']});
+      timer=setInterval(async()=>{try{const codes=await detector.detect(video);if(codes.length){stopCamera();$('code').value=codes[0].rawValue;lookup(codes[0].rawValue)}}catch(e){}},350);
+    }catch(e){$('error').textContent='No se pudo abrir la cámara. Revisa el permiso o pega el código manualmente.'}
+  };
+  function stopCamera(){clearInterval(timer);if(stream)stream.getTracks().forEach(t=>t.stop());video.style.display='none'}
+  function lookup(code){code=(code||'').trim();if(!code){$('error').textContent='Escanea o escribe un código.';return}stopCamera();$('error').textContent='';$('result').classList.add('hidden');$('loading').classList.remove('hidden');google.script.run.withSuccessHandler(render).withFailureHandler(err=>{$('loading').classList.add('hidden');$('error').textContent=err.message||'No se pudo consultar.'}).getReport(code)}
+  function render(r){$('loading').classList.add('hidden');$('result').classList.remove('hidden');$('name').textContent=r.nombre;$('meta').innerHTML=`<span class="pill">${esc(r.curso)}</span><span class="pill">${esc(r.grupo)}</span><span class="pill">Catequista: ${esc(r.catequista)}</span>`;$('saint').textContent=r.santo?'Grupo: '+r.santo:'';$('attended').textContent=r.asistencias;$('missed').textContent=r.faltas;$('percent').textContent=r.porcentaje+'%';$('bar').style.width=Math.min(100,r.porcentaje)+'%';$('categories').innerHTML=r.categorias.map(c=>`<div class="cat"><span>${esc(c.tipo)}</span><span><b>${c.asistencias}</b> de ${c.programadas} · <span class="miss">${c.faltas} faltas</span></span></div>`).join('');$('history').innerHTML=r.historial.length?r.historial.map(h=>`<li><span>${h.presente?'✅':'❌'}</span><span>${esc(h.tipo)}</span><span>${esc(h.fecha)}</span></li>`).join(''):'<li>Aún no hay fechas programadas.</li>';$('updated').textContent='Actualizado: '+r.actualizado}
+  function esc(v){const d=document.createElement('div');d.textContent=v||'';return d.innerHTML}
+</script></body></html>
