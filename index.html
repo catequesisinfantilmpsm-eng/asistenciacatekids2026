@@ -40,8 +40,11 @@ const API_URL='https://script.google.com/macros/s/AKfycbwn9Kg5n2Pe23bGtT-f0hJCFV
 function startScan(){if(typeof Html5Qrcode==='undefined')return showError('No se cargó el lector QR. Revisa tu conexión.');$('reader').classList.remove('hidden');if(scanner)scanner.clear().catch(()=>{});scanner=new Html5Qrcode('reader');scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:230,height:230}},text=>{scanner.stop();$('reader').classList.add('hidden');$('code').value=text;lookup(text)},()=>{}).catch(()=>showError('No se pudo abrir la cámara. Autoriza el permiso en Chrome.'))}
 function lookup(code){code=(code||'').trim();if(!code)return showError('Escanea o escribe un código.');$('error').textContent='';$('result').classList.add('hidden');$('loading').classList.remove('hidden');const cb='catekids_'+Date.now();window[cb]=p=>{delete window[cb];s.remove();$('loading').classList.add('hidden');p.ok?render(p.data):showError(p.error)};const s=document.createElement('script');s.onerror=()=>{delete window[cb];s.remove();showError('No fue posible conectar con la hoja.')};s.src=API_URL+'?action=report&callback='+cb+'&code='+encodeURIComponent(code);document.body.appendChild(s)}
 function normalizeHourSanta(r){
-  (r.calendario||[]).forEach(x=>{if(/hora santa/i.test(x.tipo||'')&&x.estado==='falta')x.estado='pendiente'});
-  (r.categorias||[]).forEach(c=>{if(/hora santa/i.test(c.tipo||'')){const n=Number(c.faltas)||0;c.faltas=0;c.pendientes=(Number(c.pendientes)||0)+n}});
+  const cycleStart='2026-08-31',currentMonth=(r.hoy||'').slice(0,7);
+  r.calendario=(r.calendario||[]).filter(x=>!/hora santa/i.test(x.tipo||'')||(x.iso||'')>=cycleStart);
+  const hours=r.calendario.filter(x=>/hora santa/i.test(x.tipo||''));
+  hours.forEach(x=>{if(x.estado!=='asistio')x.estado=(x.iso||'').slice(0,7)===currentMonth?'pendiente':'falta'});
+  (r.categorias||[]).forEach(c=>{if(/hora santa/i.test(c.tipo||'')){c.asistencias=hours.filter(x=>x.estado==='asistio').length;c.faltas=hours.filter(x=>x.estado==='falta').length;c.pendientes=hours.filter(x=>x.estado==='pendiente').length;c.programadas=hours.length}});
   r.asistencias=(r.categorias||[]).reduce((n,c)=>n+(Number(c.asistencias)||0),0);
   r.faltas=(r.categorias||[]).reduce((n,c)=>n+(Number(c.faltas)||0),0);
   r.pendientes=(r.categorias||[]).reduce((n,c)=>n+(Number(c.pendientes)||0),0);
